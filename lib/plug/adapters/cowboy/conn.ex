@@ -43,7 +43,18 @@ defmodule Plug.Adapters.Cowboy.Conn do
         is_integer(length) -> length
       end
 
-    body_fun = fn socket, transport -> transport.sendfile(socket, path, offset, length) end
+    body_fun = fn socket, transport ->
+      {:ok, name} = :inet.sockname(socket)
+
+      case name do
+        {:local, _path} ->
+          # workaround for https://bugs.erlang.org/browse/ERL-596
+          :ranch_transport.sendfile(transport, socket, path, offset, length, [])
+
+        {_ip, _port} ->
+          transport.sendfile(socket, path, offset, length)
+      end
+    end
 
     {:ok, req} =
       :cowboy_req.reply(status, headers, :cowboy_req.set_resp_body_fun(length, body_fun, req))
